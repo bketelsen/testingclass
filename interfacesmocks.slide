@@ -1,0 +1,195 @@
+Using Interfaces and Mocks in Go
+
+Brian Ketelsen
+me@brianketelsen.com
+@bketelsen
+
+* Introduction
+: Part of the process of ensuring that you're testing the right thing is making sure you're only testing the code in the package being tested.  But our packages seldom live in a vacuum and often make calls to other packages, network services, databases and more.
+
+: In this module we'll look at using Interfaces and Mocks to make your tests faster, less brittle, and more self-contained.
+
+* Introduction To Testing Against Interfaces
+
+Interfaces in Go are meant to describe behavior.  A type satisfies an interface if it implements the method signatures that the interface declares.  The canonical example of an interface in Go is the `fmt.Stringer` interface:
+
+	type Stringer interface {
+		func String() string
+	}
+
+Anything type that declares a function or method called `String()` that returns a `string` can be used where a `Stringer` is expected.
+
+* Interfaces and Testing
+
+Well designed Go code uses interfaces to describe behavior so that multiple types can implement that behavior.  The side-effect of this design pattern is that we can use an implementation of an interface to test code that relies on an external dependency, or a slow system.
+
+* Interfaces and Testing
+
+A good rule of thumb:
+
+	Use an interface to describe the behavior of an external dependency.
+
+This is a good rule for several reasons:
+
+- It's easier to change a dependency when it's abstracted by an interface
+- It's easier to test your code when you don't have to rely on the external dependency
+
+* Demo
+
+: demonstrate the DDD layout of the inventory program
+: types and interfaces in the root of the repository
+: dependencies as packages
+
+* Using Dependency Injection
+
+: Dependency injection is the act of passing dependencies into your types.  
+: Dependency injection allows you to maintain a clean separation of your types and their dependencies, and it enables easier refactoring and testing.
+
+* Dependency Injection 
+
+Let's use the classic example of a type that needs to talk to a database.  The database is an external dependency, and putting database specific code in your domain types makes them brittle.  
+
+	var db *sql.DB
+	func init() {
+		db = sql.Open(...)
+	}
+
+With the database dependency initialized in your packages, refactoring and testing are a non-trivial task.
+
+
+* Dependency Injection
+
+Instead, create a `New()` method to create an initialized type that accepts the dependency.
+
+	func NewOrderManager(db *sql.DB) *OrderManager {...}
+
+Now the dependency can be created elsewhere, perhaps in `main()` or in a test, and passed into your package.  In production, it's a connection to `mysql`, but in dev maybe it's a `sqlite` database instead.  Your package doesn't care.
+
+* Demo
+
+: show the inventory/postgres package with db dependency injected in constructors
+
+
+
+* Using Interfaces for Dependency Injection 
+
+: Dependency Injection really shows its power when it's combined with interfaces.
+: You've heard me say multiple times that an interface should represent a behavior.  Wrapping your dependencies with an interface allows you to have multiple implementations of that behavior, without modifications to the code that use the behavior.  Let's explore the freedom that Dependency Injection with Interfaces provides.
+
+* Domain Types
+
+Let's take a moment to think through the design of this inventory application we've been looking at.
+
+In the root of the application's folder structure are several `Domain Types` that represent the data we're operating on.  Our application has `orders`, `products`, and `suppliers`.
+
+
+* Interfaces
+The root package also contains interfaces that describe the behavior our application requires.
+
+This application has interfaces that describe storage like `OrderStorage` and `ProductStorage`.
+
+These interfaces describe basic CRUD behavior at a level of abstraction one step above the database.
+
+* Example Interface
+
+Here's an example of one of the interfaces:
+
+	// OrderStorage defines the behaviors required to
+	// perform CRUD operations on an Order
+	type OrderStorage interface {
+		Get(id int) (*Order, error)
+		Create(o Order) (*Order, error)
+		Cancel(o *Order) error
+	}
+
+This interface doesn't specify the mechanism for order storage, only the required behavior.  Any type that implements this behavior can be used to store Orders. 
+
+* Dependency Injection in Action
+
+The types that provide network services -- in our case the HTTP REST service and RPC service -- expect to be passed in a type that implements `OrderStorage`.  
+
+	
+	func NewRPCService(orderStore inventory.OrderStorage, ...)
+
+This removes the database dependency from the network service packages.  In production, you can pass in a type that implements `OrderStorage` against a database.  But when you're testing, you could use mocked types that implement the `OrderStorage` interface, but operate from memory.
+
+* Demo 
+
+: show the concrete implementation of the postgres packages
+: show the constructors of the transport packages
+: show main, where concrete types are created and passed in as dependencies 
+
+* Creating Mocks of Your Dependencies
+: Putting the concepts of Dependency Injection and Interfaces together enables much simpler testing.  Instead of using a "real" database when you test, you can create a "mock" database that returns known data that's purpose-built for your testing scenarios.  Since the mocked database implements the required interface, it can be passed into your types at test-time, and your code won't even know it's not talking to a real database.
+
+* Mocks 
+
+A mock implementation provides the same behavior without involving the external dependency.
+
+Even with the advent of powerful tools like Docker, it's still slow and painful to test against external dependencies all of the time.  When you're developing, your unit tests should use mocks instead of external dependencies.  
+
+* Creating Mocks
+
+To create a mock, you must create a type that implements the interface of the behavior you're mocking.
+
+For our `OrderStorage` interface, the mock must implement the three functions in the interface:  `Create`, `Cancel`, and `Get`.
+
+You can create one mock that models your external dependency closely, like a mock of a data storage interface that's backed by a map instead of a database.  Or, you can create many smaller mocks that are purpose-built to test a specific condition in your code.
+
+* Shortcuts
+
+Writing mocks isn't particularly tedious, and there are some tools that will make it even easier.   The first is a mock generation tool.  There are several available, my favorite is `impl`
+	
+	go get github.com/josharian/impl
+
+To use `impl` you call it from the command line, using a mocked type and the interface to implement as parameters:
+
+	impl 'o *MockOrderManager' github.com/bketelsen/testingclass/inventory.OrderStorage
+
+`impl` generates function definitions that match the interface.  You can generate the mock and save the output to a file like this:
+
+	impl 'o *MockOrderManager' github.com/your/pkg.Interface > mocks/mockorder.go
+
+* Shortcuts
+
+The second shortcut is a compile-time safety check that proves that your mock implements an interface at compile time.  It works by creating a nil version of your type and asserting it to your interface:
+
+	var _ inventory.OrderStorage = (*OrderService)(nil)
+
+With this check in your implementation packages, you can prove that your mocks and concrete types implement the intended interface.  If they don't the compiler will tell you!
+
+* Demo
+
+: show josharian/impl
+
+
+* Package Organization
+
+: the package organization in this module was inspired by the principles of Domain Driven Design
+
+: the types that model data are called `Domain Types` and are stored in the root of the project.
+
+: Interfaces describing the applications behavior with those domain types are also stored in the root of the package.
+
+: let's expore this package layout to understand why it facilitates testing so well.
+
+* Package Layout
+
+With your Domain Types and interfaces as the only code in the root of your project repository, you are presenting a clear picture of your application to a newcomer to your codebase.  A new developer can open the files in the root and have an immediate picture of the data that is being used, and the operations that will occur on that data.
+
+* Dependencies
+
+A key concept in this package layout model is keeping dependencies out of the root package.  Instead each dependency has a separate package, and we take this concept to the extreme.
+
+- Database dependency:  postgres package
+- External supplier (REST client): acme package
+- Network transport: http and rpc packages
+
+Even the `main` command is in a separate package, because it has a dependency on your terminal and operating system.
+
+* Demo 
+
+: walk through dependencies of Inventory project explaining dependencies
+: Finish with cmd/main and demonstration of creating the app itself
+
+

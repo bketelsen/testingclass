@@ -1,0 +1,478 @@
+Writing Testable Code in Go
+
+Brian Ketelsen
+me@brianketelsen.com
+@bketelsen
+
+* Introduction 
+
+: Go has a powerful and flexible testing package built in.  In this series of videos we'll learn how to put it to use to make your code more testable and more reliable.  These videos will cover:
+
+: - how to use Go's testing package
+: - how to write internal and external tests
+: - how to write tests that are concise
+: - how to make sure you're testing your code, and nothing else
+: - how to write examples that will appear in your package's documentation
+
+* Introduction To Testing In Go 
+
+: Writing good tests and having good test coverage helps you sleep at night.  When you know your code does what you expect, you can confidently refactor and deploy it.  Go testing comes as a two phased approach.  First, you write tests using the "testing" package, then you execute tests using the "go" tool, by typing "go test" followed by a package specifier.  If you run "go test" without a package specifier it will test the code in the package contained in the current directory.
+
+* Go's Testing Package
+
+	import "testing"
+
+The `testing` package provides types that allow you to write tests against your code.  The primary type you will use is `testing.T` which contains methods that you can use to mark a test as an error or a failure.
+
+Let's look at the T type in the testing package.
+
+* testing.T
+
+`testing.T` has methods that allow you to inform the test run of errors and failures. Most commonly you'll use methods like `t.Fail()` and `t.Error()`.  
+
+
+	t.Fail() // this test failed, but keep running other tests
+
+	t.Errorf("expected %s, but got %s", expected, got) // log the error, then mark the test as failed
+
+Let's explore some tests to see how this works.
+
+* Example 
+
+You use tests to provide input to functions and methods that you've written, then check the output to ensure it matches your requirements and expectations.  Let's say we have a function that tests whether an email address belongs to a set of known free email providers.
+
+	var freemails = []string{"gmail.com","yahoo.com","outlook.com"}
+
+	func IsFreemail(email string) bool {
+		for _,provider := range freemails {
+			if strings.Contains(email, provider) {
+				return true
+			}
+		}
+		return false
+	}
+
+* Example
+
+To test that function, we can write a test that provides a free email address and checks our function's output.
+
+	func TestGmail(t *testing.T) {
+		gmail := "user@gmail.com"
+		if !IsFreemail(gmail) {
+			t.Fail()
+		}
+	}
+
+* Class Materials
+
+To download the materials, slides, and examples for this course, use `go get`:
+
+	go get github.com/bketelsen/testingclass
+
+The slides are in the root directory, and the examples are in the subdirectories.
+
+You can install the Go Present tool with the following command:
+
+	go get golang.org/x/tools/cmd/present
+
+Then start the present tool from the root of this directory.
+
+
+* Demo 
+
+: Let's look at this same example in the terminal to see how it's organized and demonstrate how to run it.
+
+: Start by opening a terminal and changing to the directory you downloaded earlier.
+
+: 	cd $GOPATH/src/github.com/bketelsen/testingclass
+
+: The demo for the first module is in the `testablecode/freemail`package.  Change into that directory:
+
+: 	cd testablecode/freemail
+
+: Now let's look at the package layout: 
+
+: 	ls -la
+
+* Demo 
+
+: There are two files in this package. The mail.go file contains our package's source code for the `IsFreemail()` function.
+
+: The other file is called `mail_test.go` and contains our tests.
+
+: These files are named according to a convention for Go packages.  Generally, there is a file with testing code for every file with source code.  The test file must end with the suffix "_test.go".  This is how the `go test` command knows which files belong to the package, and which are tests for the package.
+
+* Demo 
+
+: Open the `mail.go` file and see that it is just an ordinary Go package with implementation of our `IsFreemail()` function.
+
+: Now open the `mail_test.go` file and examine the contents. 
+
+: To execute the tests in the current directory type `go test`
+
+: Since we didn't give a package specifier to the `go test` command, it will run any tests in the current directory.
+	
+
+* Writing Internal Tests for Go Code 
+
+: Go tests are categorized as Internal and External.  Internal tests share the same package name as the package they are testing, and must live in the same directory.  99% of the tests you write will be Internal tests, because generally you want to be testing the functionality of the code in the package, and often the functions you want to test are unexported.
+
+
+* Internal Tests
+
+Internal tests share the same package and scope as the code they are testing.  When creating an internal test, you'll use the same package name as your code declares.  
+
+mail.go: 
+	
+	package freemail 
+	// .. code 
+
+mail_test.go: 
+
+	package freemail
+	// .. tests
+
+These two files are in the same directory, and use the same package scope `freemail`.  This means your tests can use both exported and unexported identifiers in the package.  
+
+* Internal Tests
+
+We saw earlier that tests use the `testing.T` type to execute tests and report success, failures, or errors.  
+
+Let's look a little closer at the `testing.T` type and its usage in tests.
+
+* Sidebar: Test Names
+
+By convention, all test functions start with the word "Test", and end with a word that describes what is being tested.   In the example we showed earlier, a test for `IsFreemail()` was called `TestGmail()`.  This descriptive name shows the specific functionality or usecase that is being tested.  Here it shows we're testing a GMail address. 
+
+* TestGmail 
+
+The test that covers a GMail address in the `freemail` package has the same function signature as all Go tests will have:
+
+	func TestGmail(t *testing.T) {}
+
+Go tests have one parameter, a pointer to the `testing.T` type that is created by the `go test` runtime when tests are run.  The `testing.T` type has methods that you can call in your tests to print errors or declare failures, but more importantly the `testing.T` type collects the status of each test that is run, to report upon completion of the test.
+
+* Test Report
+
+When you run `go test` against a package, the output will tell you the overall status with a `PASS` or `FAIL` line, and the status of each package included in the package specifier.  Running `go test` in the `freemail` directory only runs tests for one package, so we see one line with the status for that package:
+
+
+	PASS
+	ok  	github.com/bketelsen/testingclass/testablecode/freemail	0.001s
+	
+* testing.T
+
+The `freemail` package test uses one method from the `testing.T` type: `t.Fail()`, which is inside the if statement that tests whether the function returned the proper answer given an email address in the free email domain list.
+
+	if !IsFreemail(gmail) {
+		t.Fail()
+	}
+
+Most of the methods on the `testing.T` type are a combination of `t.Fail()` and `t.Log()`.  For example, `t.Error()` calls `t.Log()` then `t.Fail()`, so you can mark a test as failed with a descriptive log entry.
+
+* Testing Principles for Go Code
+
+: t.Error, t.Fail, t.Parallel, testing.Short, testing.Verbose
+: Package specifier
+: test execution regex
+
+: You use the `testing` package and the `testing.T` type to control the execution of your tests.  Let's take a look at some of the different options you have to control how tests execute, and which tests run when you execute them.
+
+* Reporting Failure
+
+You've already seen `t.Fail()` and `t.Error()`.  If you open the godoc for the `testing.T` type, you'll see that there are several other methods that have similar results that are built as a combination of these two methods.
+
+`t.Log()` prints a descriptive error message and marks the test as failed.
+
+`t.FailNow()` marks the current test as failed and stops execution.
+
+`t.Fatal()` logs an error message and calls `t.FailNow()`
+
+There are a few other methods that have a similar pattern of logging the error, reporting the test case as failed, and optionally stopping test execution.  You can see them in the testing package's godoc.
+
+* Package Specifiers
+
+When executing tests with the `go test` command, the first argument to the command is the package specifier.  You can get more information about the package specifier format by typing `go help packages` from the command line and reading the documention.   We'll summarize here:
+
+- A package specifier that begins with "." or ".." is interpreted as a file system path that refers to the package in relative directory pointed to by the package specifier
+- If the package specifier is a package name like "github.com/bketelsen/captainhook" the go tool will test the package under your GOPATH by that name.
+- If no import path is given, the package in the current directory is tested.
+
+* Limiting Tests That Are Run
+
+In addition to using a package specifier you can pass a command line flag to the `go test` command with a regular expression specifying a test, or matching group of tests that you want to run.  You can specify this flag using by passing `-run=Pattern` to the test command.
+
+	go test -run=Gmail
+
+	go test -run=G
+
+Both of these flags will execute our `TestGmail()` test.
+
+* t.Parallel()
+
+You can signify that a test is safe to run in parallel with other tests by calling the `t.Parallel()` method.  When called, a test will be marked as safe to run in parallel with other tests that have also called the `t.Parallel()` method.
+
+	func TestGmail(t *testing.T) {
+		t.Parallel()
+		...
+	}
+
+Tests that run in parallel should have no package-level state and no side effects that could change the outcome of other running tests.
+
+* Short 
+
+The `go test` command has a flag `-short` that you can check in your tests to skip longer or more redundant tests:
+
+	func TestLongThing() {
+		if testing.Short() {
+			// do smaller test 
+			// or maybe call skip:
+			t.Skip("skipping test in short mode")
+		}
+	}
+
+* Verbose
+
+Similarly, you can use the `-v` flag to set your tests to "verbose" mode, then use a call to `testing.Verbose()` to determine whether you want to log extra information.
+
+	func TestNoisyThing() {
+		if testing.Verbose() {
+			log.Println("Starting Noisy test!")
+		}
+	}
+
+This example is a little contrived, but it illustrates the usage well.  Use the `testing.Verbose()` check to decide whether to output extra information in your tests.
+
+* Demo
+
+: in the testablecode/freemail2 directory there is another copy of the freemail package.  There are now more tests that show some of the different options available to you when you're running tests.  
+
+: Let's start by looking at package selectors 
+: open the freemail2 directory in your terminal.  if you look at the `mail_test.go` file it now contains several tests with different names.  To run only the gmail tests, you can type `go test -run=G`, which will run all tests that start with the letter "G"
+
+* Demo
+: There are also some verbose logs in the new freemail2 package.  To see them, run the tests in verbose mode, by typing `go test -v`
+: you'll see the output of the verbose logs that we didn't see in the last run.
+
+* Demo
+: Some of the tests were marked to be skipped in Short testing mode too.  You can run short mode by typing `go test --short` which will skip some of the tests.
+
+: It's harder to tell that the tests were skipped though, so it's better to run with verbose mode when you run short tests.  `go test -v --short` does the trick!
+
+* Demo
+
+: finally, all of the tests have been marked as Parallel capable, which will allow them to run in parallel. 
+: you can modify the level of parallelism by passing the `--parallel` flag with a number of goroutines like
+: `go test --parallel 4`
+
+: these tests are too short to notice a difference in execution time, but larger packages will definitely see an improvement
+
+* Writing Table Driven Tests in Go 
+: writing tests can be tedious, and I'll admit I was never a fan of writing tests.  I always considered them a necessary distraction from writing code that "did something".  It wasn't until I discovered table driven testing that I really started to love writing tests.  
+
+: table driven tests allow you to write a single test and pass it a slice of test cases, which greatly reduces the amount of testing code you need to write. Suddenly my tests looked a lot cleaner and I was able to cover many more test conditions with one test function.  That's a win all around.
+
+* Table Driven Tests
+
+To write a table driven test, start by creating a structure that has fields for the inputs and expected outputs of your test cases.
+
+Let's write table driven tests for this function:
+
+	func Multiply(a, b int) int {
+		return a * b
+	}
+
+
+* Test Case Structure
+
+A test case structure for this function should contain two operands that will be passed to the `Multiply()` function, as well as the expected result.
+
+	type TestCase struct {
+		A int
+		B int
+		Result int
+	}
+
+We can create a new test case the same way we create any struct:
+
+	tc := TestCase{A:1,B:2,Result:2}
+
+* Testing With Our Structure
+
+A simple test that uses this structure looks like this:
+	
+	func TestMultiply(t *testing.T) {
+		tc := TestCase{A: 1, B: 2, Result: 2}
+		res := Multiply(tc.A, tc.B)
+		if res != tc.Result {
+			t.Errorf("Expected %d, got %d", tc.Result, res)
+		}
+	}
+
+This works as expected, and demonstrates the mechanics of using a test case inside a test.  Now let's extend the concept into a slice of test cases.
+
+* Table Driven Test
+
+To really get the power out of this pattern, we need to create a slice of test cases.
+
+	var tests = []TestCase{
+		{A: 1, B: 2, Result: 2},
+		{A: 10, B: 10, Result: 100},
+	}
+
+Now we can iterate over the test cases in the test using the `range` statement:
+
+	for _, tc := range tests {
+		res := Multiply(tc.A, tc.B)
+		if res != tc.Result {
+			t.Errorf("Expected %d, got %d", tc.Result, res)
+		}
+	}
+
+Awesome! Now we can add tests for new cases without modifying the test function.  We just add new cases to the struct.
+
+* Anonymous Structs
+
+It isn't necessary to create a named type to hold your test cases, in fact, it's more common to see anonymous structs used.  Here's the same test case slice as an anonymous struct:
+
+
+	var anontests = []struct {
+		A      int
+		B      int
+		Result int
+	}{
+		{A: 1, B: 2, Result: 2},
+		{A: 10, B: 10, Result: 100},
+	}
+
+* Subtests
+
+Just like an infomercial on American television, there's always MORE with Go.  As of Go 1.7, you can now use Subtests, which give you a little extra information about the test cases that fail.
+
+Subtests are implemented with the new t.Run() function that takes a string for the test name, and the test function itself.
+
+	for _, tc := range anontests {
+		t.Run(fmt.Sprintf("%d times %d", tc.A, tc.B), func(t *testing.T) {
+			res := Multiply(tc.A, tc.B)
+			if res != tc.Result {
+				t.Errorf("Expected %d, got %d", tc.Result, res)
+			}
+		})
+	}
+
+It's a small change, but now when a test fails we'll see the specific case that failed in the output of the test run.
+
+* Subtests
+
+Subtests are also particularly useful when you need to do some setup before your tests, or some teardown afterwards.
+
+    func TestGet(t *testing.T) {
+        cl := supplier.NewClient("http://127.0.0.1:8080")
+        addresses := getAddresses()
+    	or _, tc := range addresses {
+    		t.Run(tc.URL), func(t *testing.T) {
+    			res := cl.Call(tc.URL)
+    			if res != http.StatusOK {
+    				t.Errorf("Expected %d, got %d", http.StatusOK, res)
+    			}
+    		})
+    	}
+    }
+
+In this example, we create a new http client for an external service before iterating over the test cases, saving the cost of creating that client for each test.
+
+
+* Demo
+: in the testablecode/table subdirectory there are two files with the code we've used in these examples.
+: Let's look at the tests to see how they're constructed and run.
+
+
+* Containing Your Tests 
+
+: Now that you've seen a few tests, let's talk about how to test *your* code.  Since tests usually call methods and functions in your packages it stands to reason that the minimal testable unit of code becomes the functions in your package.
+
+: That means that you can make your code more testable by follwing a few conventions:
+: - write functions and methods that have a single, clear, testable purpose.
+: - avoid functions that depend on state that isn't passed in as a parameter
+: - write one or more test for every function or method that is important enough to test 
+
+: You can also save a lot of time by thinking through *what* you're testing.  Test your code, not the standard library or packages that you've imported.
+
+* Writing Testable Code
+
+Step one in writing more testable code is making your functions more testable.  The single most important thing to do is reduce the complexity of your functions.
+
+Start with this guide:  If you can't describe your entire function (in the GODOC comments of course) within two sentences, consider breaking it up.
+
+- Functions should have a single purpose
+- The purpose of the function should be clear
+- The result of the function should be something you can test with a given set of inputs and outputs
+
+* Writing Testable Code
+
+Another helpful rule of thumb is to avoid writing functions that depend on external state.  If the function requires data to perform a calculation, that data should be part of the receiver of the method, or part of the parameter list of the function.
+
+* Test Scope
+
+I've seen dozens of instances in open source Go code where a tool has a test to ensure that the configuration file is properly read and parsed.  To do this the author of the code creates a test file and reads it from disk in a test.
+
+If you stop and think about it, Go's `io` library has a _lot_ of tests covering opening and reading files from disk.  It isn't necessary to test that code again.  Instead provide your configuration as a string or byte slice and use that for your test.
+
+* Test Scope 
+
+Here are some more examples of scope anti-patterns:
+
+- Testing marshaling and unmarshaling of structs into JSON or XML.  
+- Writing and reading records from a database
+- Making network calls and parsing the response
+
+* Test Scope
+
+Each of these examples is testing code far beyond the code you're writing.  And each of these anti-patterns can be avoided by carefully applying the lessons from rest of this course.  
+
+* Demo
+: TODO come back and find better examples, these suck
+
+* Writing External Tests In Go (video)
+: External tests are tests where the testing code declares a different package than the package being tested.
+: External tests are useful if you want to get a feeling for how consumers of your package have to use it.
+
+: They're also specifically useful in two cases -
+
+: - when you need to break a dependency cycle  (rare)
+: - when you want to write Examples for your documentation 
+
+* External Tests
+
+To write an external test, use the name of the package being tested, followed by "_test". So if you're testing the `scope` package, you'd use `scope_test` as the package name for your external tests.
+
+This creates a testing package that isn't in the same scope as the package being tested.  All identifiers in the `scope` package must then be prefixed by their package identifier.
+
+* Examples in External Tests
+
+Example tests are a special case of tests that are included in the documentation for your package.
+
+An Example test function starts with the word `Example` instead of the word `Test`.
+
+	func ExampleReverse() {
+		fmt.Println(strings.Reverse("hello"))
+		// Output: olleh
+	}
+
+* Examples
+
+Examples serve two purposes.  If you follow the naming pattern, the example will be inserted next to the appropriate function in your package's documentation.
+
+Even better, though, the example's output is tested against the output declared in the function by the comment.  The testing runtime will execute the example function and compare the output with the output declared in the comment.  If they differ, the test is marked as failed.
+
+* Dependency Cycles
+
+Infrequently you need to use a package that depends on the package you're testing in order to run your tests.  There are only two examples of this in Go's standard library.  `bufio` is one. It uses the `utf8` package to test the `bufio` package, but `bufio` imports `utf8`.  The solution to this circular dependency is to use external tests to have a third package that imports both of them.
+
+This situation is rare, and often a sign that your packages might need to be reorganized, though.
+
+* Demo
+
+: Show bufio package and dependency cycle
+
+: show external godoc -- godoc --http=:6060  github.com/bketelsen..etc.

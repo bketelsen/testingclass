@@ -1,0 +1,22 @@
+BenchmarkFib-4   	100000000	        13.1 ns/op
+BenchmarkFib-4   	200000000	         9.83 ns/op
+BenchmarkFib-4   	200000000	         9.71 ns/op
+BenchmarkFib-4   	200000000	         9.74 ns/op
+BenchmarkFib-4   	200000000	         9.74 ns/op
+BenchmarkFib-4   	200000000	         9.71 ns/op
+BenchmarkFib-4   	200000000	         9.72 ns/op
+BenchmarkFib-4   	200000000	         9.70 ns/op
+BenchmarkFib-4   	200000000	         9.78 ns/op
+BenchmarkFib-4   	100000000	        13.0 ns/op
+BenchmarkFib-4   	200000000	         9.69 ns/op
+BenchmarkFib-4   	200000000	         9.71 ns/op
+BenchmarkFib-4   	200000000	         9.88 ns/op
+BenchmarkFib-4   	200000000	         9.71 ns/op
+BenchmarkFib-4   	200000000	         9.71 ns/op
+BenchmarkFib-4   	200000000	         9.81 ns/op
+BenchmarkFib-4   	200000000	         9.81 ns/op
+BenchmarkFib-4   	200000000	         9.74 ns/op
+BenchmarkFib-4   	200000000	         9.72 ns/op
+BenchmarkFib-4   	200000000	         9.70 ns/op
+PASS
+ok  	github.com/bketelsen/testingclass/perfbench/fib	55.621s

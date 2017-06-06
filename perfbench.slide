@@ -1,0 +1,207 @@
+Measuring Performance With Benchmarks in Go
+
+Brian Ketelsen
+me@brianketelsen.com
+@bketelsen
+
+* Introduction
+: Testing the functionality of your code is a key part of your testing strategy.  But all of that testing is useless if your application performs poorly in production.  The only guaranteed way to test a production load is with a system that is the same as your production system under an equal load. 
+
+: However, you can mitigate some of that risk by creating benchmark tests to measure the performance of individual components in your code.
+
+
+* Writing Benchmark Tests in Go
+
+In an ideal world your benchmarks would run on a production-class machine with no other workload.  That should be your goal if performance is critical to your application.  If that's not possible you can run in your CI environment, or on your laptop.  Just ensure that you close other applications before running benchmarks, and run each benchmark multiple times to get a more stable measurement of performance.
+
+* Benchmarks in Go
+
+A benchmark is a special case test that measures the execution time of a function repeatedly, then reports the statistics to you.   Writing benchmarks in Go requires the use of the `testing` package.  Similar to `testing.T` which manages the state of your tests, `testing.B` manages the state of your benchmarks.
+
+	func BenchmarkFib(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			Fib(20) // run the Fib function b.N times
+		}
+	}
+
+* testing.B
+
+The `B` struct has a variable called `N`, which represents the number of times a benchmark will be run.  Each benchmark test will include a `for` loop that runs until it reaches `b.N` iterations.
+
+	for n:=0; n < b.N; n++ {...}
+
+`b.N` is calculated at benchmark time to provide enough iterations of your function to give a stable report of its runtime.  It may be ten thousand one run, or thirty thousand the next, depending on what other processes are stealing resources on your testing machine.
+
+* Comparing Benchmarks 
+
+If you redirect the output of your benchmark tests to a file, you can compare different runs using tools specifically built for comparing benchmarks.  There are two tools I recommend.
+
+The standard is `benchcmp`:
+	
+		go get golang.org/x/tools/cmd/benchcmp 
+
+`benchcmp` compares the outputs of two benchmark runs and shows the difference between the two runs.
+	
+	benchmark          old ns/op     new ns/op     delta
+	BenchmarkFib-4     44991         9.87          -99.98%
+
+* Comparing Benchmarks 
+
+An alternative to `benchcmp` is `benchstat` written by Russ Cox:
+	
+	go get rsc.io/benchstat
+
+`benchstat` provides more complex statistical analysis on your test runs, so it often requires you to run your benchmarks more than once.  Use the `-count=N` flag to your `go test` command to have multiple benchmark runs:
+
+	go test -bench-. -count=20 > old.txt
+
+`benchstat` provides much more detailed results:
+
+	name   old time/op  new time/op  delta
+	Fib-4  45.2µs ± 1%   0.0µs ± 1%  -99.98%  (p=0.000 n=20+16)
+
+* Demo
+
+: bench fib demo
+
+: DEMO: `go`test`-bench=.`
+
+* Writing Good Benchmarks
+
+: A good benchmark measures the performance of a unit of work without any variable factors like network or database latency.  Benchmark tests should measure the performance of your *code*, not your network, or the database, or the filesystem.  Those measurements should happen in Production.
+
+: Since benchmarks are so easy to write, I tend to write a lot of them for code that's important.  It's easy to overlook a critical performance problem in even trivial functions, and I prefer not to be surprised by disappointed customers when I can avoid it.
+
+
+* Benchmarking Your Functions
+
+You've already seen benchmarks in action.  Now let's learn how to apply them to your code base.  Benchmarks are contained in `_test.go` files, just like your unit tests. 
+
+You can make sure that you're isolating just the function you want to benchmark by calling `b.ResetTimer()` after any expensive setup:
+
+	func BenchmarkBigLen(b *testing.B) {
+		big := NewBig()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			big.Len()
+		}
+	}
+
+* Reporting Allocations
+
+If you're concerned about how much garbage you're creating, you can call `b.ReportAllocs()` which will instruct the benchmark to report count and size of allocations per function call.
+
+	BenchmarkConcatenate-4	149 B/op       6 allocs/op
+	BenchmarkFPrintf-4     293 B/op	       8 allocs/op
+	BenchmarkStrconv-4     165 B/op	       5 allocs/op
+
+
+* Demo
+
+: concat demo
+: allocations
+
+* Avoiding Compiler Optimizations
+: As the Go compiler gets better and smarter, it contains more and more optimizations to improve the speed of your code.  Often these optimizations will have no effect on your benchmarks, but there is a specific case that catches newcomers to benchmarking that we need to explore.
+
+* Optimizing Unused Results
+
+In the following code, the result of `popcnt()` is not assigned to a variable.  Therefore the compiler sees this as a function that has no side effects and will discard the function call completely:
+
+	func BenchmarkPopcnt(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			popcnt(uint64(i))
+		}
+	}
+
+Becomes: 
+	
+	func BenchmarkPopcnt(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+		}
+	}
+
+* The Fix
+
+To prevent the compiler from removing your function calls from benchmarks, you must store the return value of the function call.
+
+It's not enough to store it inside the benchmark loop, you also have to store it outside the loop.  In order to do that you'll need to store it twice:
+
+	var pc uint64 // outside the benchmark
+
+	func BenchmarkPopcnt(b *testing.B) {
+		var pci uint64 // outside the loop
+		for i := 0; i < b.N; i++ {
+			pci = popcnt(uint64(i))
+		}
+		pc = pci // required to avoid unused warning
+	}
+
+* Setup and Teardown in Benchmarks
+
+: Sometimes you you need to do some setup before you can run a method.  In those cases you'll want to take extra care to make sure you're not measuring the one time costs of your setup in the benchmarks.
+: The `testing.B` type has a special function that allows you to reset the start time of your benchmarks after you've completed any necessary setup.
+
+* Setup and Teardown
+
+In order to avoid benchmarking your setup and teardown code, you can call the `b.ResetTimer()` method.  `b.ResetTimer()` resets the start time of your benchmark allowing you to do your one-time setup before the clock starts on the tests.
+
+    func BenchExpensive(b *testing.B) {
+        setupLongStuff()
+        b.ResetTimer()
+        for n := 0; n < b.N; n++ {
+            myFunction()
+        }
+    }
+
+The `b.ResetTimer()` call restarts the benchmark clock so that the slow running `setupLongStuff()` function doesn't skew your benchmarks.
+
+* Teardown
+
+Any teardown code you need to run should be after the benchmark's control loop.
+
+    func BenchExpensive(b *testing.B) {
+        setupLongStuff()
+        b.ResetTimer()
+        for n := 0; n < b.N; n++ {
+            myFunction()
+        }
+        cleanup()
+    }
+
+This ensures that the cost of running the `cleanup()` function isn't calculated into your benchmarks.  You can just as easily call the `cleanup()` in a `defer()` statement nearer to the top of the benchmark.
+
+* Demo
+
+: show concat setup & teardown
+
+* Profiling Benchmarks
+
+: One of the best things about benchmarks is the fact that you can use benchmarks to profile your code.  With just a little extra work, your benchmarks become a pointer to the slow segments of your code, allowing you to optimize performance.
+: Go supports three kinds of profile captures, CPU, Memory, and Blocking.  CPU and Memory profiles are sampled during benchmark execution.  Blocking profiles capture runnable goroutines that were blocked, allowing you to capture the concurrency behavior of your application.
+
+
+* Profiling benchmarks
+
+Profiling is a big topic, and we won't cover the intricacies here.  The important thing to know is that in order to read a profile of your application you need both the binary that created the profile and the profile that was captured.
+
+The `testing` package has built in support for generating CPU, memory, and block profiles.
+
+- `-cpuprofile=$FILE` writes a CPU profile to `$FILE`. 
+- `-memprofile=$FILE`, writes a memory profile to `$FILE`, `-memprofilerate=N` adjusts the profile rate to `1/N`.
+- `-blockprofile=$FILE`, writes a block profile to `$FILE`.
+
+Using any of these flags also preserves the binary created during benchmarking.
+
+    % go test -run=XXX -bench=. -cpuprofile=c.p myapp // Run the benchmark, capture profile
+    % go tool pprof myapp.test c.p  // run pprof to investigate profile
+
+_Note:_ use `-run=XXX` to disable tests, you only want to profile benchmarks.
+
+
+* Demo
+
+: demonstrate benchmarks with the concat tests
+: show pprof
+: show pprof web
+
