@@ -13,7 +13,7 @@ import (
 	"github.com/bketelsen/testingclass/interfacesmocks/inventory/transport/rpc"
 )
 
-unc main() {
+func main() {
 
 	db, err := sql.Open("postgres",
 		"docker:docker@tcp(127.0.0.1:5432)/inventory")
